@@ -1,0 +1,22 @@
+# FLIR ADAS v2 — Experiment 5
+# Thermal-only mode: both streams use thermal images
+# Filtered to 4 classes: person(1), bike(2), car(3), dog(4)
+
+dataset_params:
+  rgb_train_path: "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_train/data"
+  rgb_test_path:  "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_val/data"
+  ir_train_path:  "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_train/data"
+  ir_test_path:   "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_val/data"
+  ann_train_path: "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_train/coco.json"
+  ann_test_path:  "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_val/coco.json"
+  num_classes: 5  # bg + person + bike + car + dog
+
+train_params:
+  seed: 42
+  batch_size: 16
+  num_epochs: 100
+  lr: 0.00005
+  task_name: "exp5_v5_flir"
+  ckpt_name: "model_final.pth"
+
+model_params: {}
