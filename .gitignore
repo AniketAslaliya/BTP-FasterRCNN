@@ -1,0 +1,16 @@
+exp*/
+outputs/
+experiments/
+*.log
+nohup.out
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.backup
+apply_changes.py
+cleanup.sh
+organize_code.sh
+patch_*.py
+*.zip
+*.swp
+.DS_Store

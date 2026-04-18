@@ -1,0 +1,19 @@
+# FLIR Aligned — Experiment 5.1 (Optimized for SOTA)
+dataset_params:
+  root_path: "/home/23uec571/FLIR_aligned"
+  num_classes: 4  # bg + person + bicycle + car
+
+train_params:
+  seed: 42
+  batch_size: 24
+  num_epochs: 100
+  lr: 0.000005
+  task_name: "exp5_v5_optimized"
+  ckpt_name: "model_final.pth"
+  # Suggestion E: Tightened NMS
+  score_thresh: 0.40
+  nms_iou_threshold: 0.45
+
+model_params:
+  # Suggestion F: Car-optimized aspect ratios (wide boxes)
+  anchor_ratios: [0.5, 1.0, 1.5, 2.0, 3.0] 

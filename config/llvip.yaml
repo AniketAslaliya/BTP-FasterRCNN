@@ -1,0 +1,29 @@
+dataset_params:
+  rgb_train_path: "../LLVIP_extracted/LLVIP/aligned_llvip_final/rgb/train/images"
+  ir_train_path:  "../LLVIP_extracted/LLVIP/aligned_llvip_final/ir/train/images"
+
+  rgb_val_path: "../LLVIP_extracted/LLVIP/aligned_llvip_final/rgb/val/images"
+  ir_val_path:  "../LLVIP_extracted/LLVIP/aligned_llvip_final/ir/val/images"
+
+  ann_train_path: "../LLVIP_extracted/LLVIP/Annotations"
+  ann_val_path:   "../LLVIP_extracted/LLVIP/Annotations"
+
+  num_classes: 2
+
+model_params:
+  backbone: "resnet50"
+
+
+train_params:
+  task_name: "llvip_fasterrcnn"
+  seed: 1111
+
+  num_epochs: 20
+  lr: 0.005
+  lr_steps: [12, 16]
+
+  batch_size: 1
+  num_workers: 4
+
+  ckpt_name: "fasterrcnn_llvip.pth"
+

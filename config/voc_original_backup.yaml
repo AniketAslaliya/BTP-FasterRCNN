@@ -1,0 +1,18 @@
+dataset_params:
+  rgb_train_path: "/home/23uec571/LLVIP/visible/train"
+  rgb_test_path:  "/home/23uec571/LLVIP/visible/test"
+  ir_train_path: "/home/23uec571/LLVIP/infrared/train"
+  ir_test_path:  "/home/23uec571/LLVIP/infrared/test"
+  ann_train_path: "/home/23uec571/LLVIP/Annotations"
+  ann_test_path:  "/home/23uec571/LLVIP/Annotations"
+  num_classes: 2
+
+train_params:
+  seed: 42
+  batch_size: 24
+  num_epochs: 50
+  lr: 0.00005
+  task_name: "cssa_llvip"
+  ckpt_name: "model_final.pth"
+
+model_params: {}
