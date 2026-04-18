@@ -1,22 +1,19 @@
-# FLIR ADAS v2 — Experiment 5
-# Thermal-only mode: both streams use thermal images
-# Filtered to 4 classes: person(1), bike(2), car(3), dog(4)
-
+# FLIR Aligned — Experiment 5.1 (Optimized for SOTA)
 dataset_params:
-  rgb_train_path: "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_train/data"
-  rgb_test_path:  "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_val/data"
-  ir_train_path:  "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_train/data"
-  ir_test_path:   "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_val/data"
-  ann_train_path: "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_train/coco.json"
-  ann_test_path:  "/home/23uec571/FLIR/FLIR_ADAS_v2/images_thermal_val/coco.json"
-  num_classes: 5  # bg + person + bike + car + dog
+  root_path: "/home/23uec571/FLIR_aligned"
+  num_classes: 4  # bg + person + bicycle + car
 
 train_params:
   seed: 42
-  batch_size: 16
+  batch_size: 24
   num_epochs: 100
-  lr: 0.00005
-  task_name: "exp5_v5_flir"
+  lr: 0.000005
+  task_name: "exp5_v5_optimized"
   ckpt_name: "model_final.pth"
+  # Suggestion E: Tightened NMS
+  score_thresh: 0.40
+  nms_iou_threshold: 0.45
 
-model_params: {}
+model_params:
+  # Suggestion F: Car-optimized aspect ratios (wide boxes)
+  anchor_ratios: [0.5, 1.0, 1.5, 2.0, 3.0] 

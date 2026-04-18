@@ -1,13 +1,18 @@
 """
-faster_rcnn_v5_fixed.py — FLIR Aligned 3-class (person / car / bicycle)
-"""
+faster_rcnn_v5.py — V4 architecture adapted for FLIR ADAS v2
 
+Changes from V4:
+  - num_classes = 5 (bg + person + car + bicycle + dog/other)
+  - Anchor ratios updated for multi-class: (0.5, 1.0, 1.5, 2.0, 3.0)
+    covers tall persons (0.33) AND wide cars (3.0)
+  - Everything else identical to V4 (CBAM@C1/C2/C3, CrossAttn@C4, learnable alpha)
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
 from torchvision.models import resnet50, ResNet50_Weights
-from torchvision.ops import FeaturePyramidNetwork, sigmoid_focal_loss
+from torchvision.ops import FeaturePyramidNetwork
 from torchvision.ops.feature_pyramid_network import LastLevelMaxPool
 from torchvision.models.detection import FasterRCNN as TorchFasterRCNN
 from torchvision.models.detection.rpn import AnchorGenerator
@@ -117,8 +122,8 @@ class DualResNetBackbone(nn.Module):
         i  = self.ir_stem(ir)
         i1 = self.ir_layer1(i);   i2 = self.ir_layer2(i1)
         i3 = self.ir_layer3(i2);  i4 = self.ir_layer4(i3)
-        return dict(rgb_c1=r1, rgb_c2=r2, rgb_c3=r3, rgb_c4=r4,
-                    ir_c1=i1,  ir_c2=i2,  ir_c3=i3,  ir_c4=i4)
+        return dict(rgb_c1=r1,rgb_c2=r2,rgb_c3=r3,rgb_c4=r4,
+                    ir_c1=i1, ir_c2=i2, ir_c3=i3, ir_c4=i4)
 
 
 class MultimodalBackboneWithFPN(nn.Module):
@@ -136,60 +141,28 @@ class MultimodalBackboneWithFPN(nn.Module):
         self.out_channels = fpn_out
 
     def forward(self, rgb, ir):
-        f  = self.body(rgb, ir)
+        f = self.body(rgb, ir)
         c1 = self.fusion_c1(f["rgb_c1"], f["ir_c1"])
         c2 = self.fusion_c2(f["rgb_c2"], f["ir_c2"])
         c3 = self.fusion_c3(f["rgb_c3"], f["ir_c3"])
         c4 = self.fusion_c4(f["rgb_c4"], f["ir_c4"])
-        return self.fpn(OrderedDict([("0", c1), ("1", c2), ("2", c3), ("3", c4)]))
-
-
-def _focal_loss_fastrcnn(class_logits, box_regression, labels, regression_targets,
-                          alpha=0.25, gamma=2.0):
-    labels_t     = torch.cat(labels, dim=0)
-    reg_targets  = torch.cat(regression_targets, dim=0)
-    num_classes  = class_logits.shape[1]
-    one_hot      = F.one_hot(labels_t, num_classes=num_classes).float()
-    cls_loss     = sigmoid_focal_loss(
-        class_logits, one_hot, alpha=alpha, gamma=gamma, reduction="mean")
-    sampled_pos  = torch.where(labels_t > 0)[0]
-    labels_pos   = labels_t[sampled_pos]
-    N, _         = class_logits.shape
-    box_regression = box_regression.reshape(N, box_regression.size(-1) // 4, 4)
-    box_loss = F.smooth_l1_loss(
-        box_regression[sampled_pos, labels_pos],
-        reg_targets[sampled_pos], beta=1.0/9, reduction="sum")
-    box_loss = box_loss / max(labels_t.numel(), 1)
-    return cls_loss, box_loss
-
-
-FLIR_ANCHOR_SIZES  = ((16,32),(32,64),(64,128),(128,256),(256,512))
-FLIR_ANCHOR_RATIOS = ((0.33, 0.5, 1.0, 2.0, 3.0),) * 5
-
+        return self.fpn(OrderedDict([("0",c1),("1",c2),("2",c3),("3",c4)]))
 
 class FasterRCNN(nn.Module):
-    def __init__(self, num_classes=4, box_score_thresh=0.30, box_nms_thresh=0.45,
-                 focal_alpha=0.25, focal_gamma=2.0):
-        super().__init__()
-
-        import torchvision.models.detection.roi_heads as _rh
-        _alpha, _gamma = focal_alpha, focal_gamma
-        def _patched(cls_logits, box_reg, labels, reg_targets):
-            return _focal_loss_fastrcnn(cls_logits, box_reg, labels, reg_targets,
-                                        alpha=_alpha, gamma=_gamma)
-        _rh.fastrcnn_loss = _patched
-
-        backbone   = MultimodalBackboneWithFPN(fpn_out=256)
-        anchor_gen = AnchorGenerator(sizes=FLIR_ANCHOR_SIZES, aspect_ratios=FLIR_ANCHOR_RATIOS)
-        roi_pooler = MultiScaleRoIAlign(featmap_names=["0","1","2","3"],
-                                        output_size=7, sampling_ratio=2)
+    def __init__(self, num_classes, rpn_anchor_generator=None, box_score_thresh=0.05, box_nms_thresh=0.5):
+        super(FasterRCNN, self).__init__()
+        backbone = MultimodalBackboneWithFPN(fpn_out=256)
+        anchor_gen = AnchorGenerator(
+            sizes=((32,), (64,), (128,), (256,), (512,)),
+            aspect_ratios=((0.5, 1.0, 1.5, 2.0, 3.0),) * 5)  # multi-class optimised
+        roi_pooler = MultiScaleRoIAlign(
+            featmap_names=["0","1","2","3"], output_size=7, sampling_ratio=2)
         self.detector = TorchFasterRCNN(
             backbone=backbone, num_classes=num_classes,
-            box_score_thresh=box_score_thresh, box_nms_thresh=box_nms_thresh,
+            box_score_thresh=box_score_thresh,
+            box_nms_thresh=box_nms_thresh,
             rpn_anchor_generator=anchor_gen, box_roi_pool=roi_pooler,
-            min_size=512, max_size=640,
-            rpn_pre_nms_top_n_train=3000, rpn_pre_nms_top_n_test=1500,
-            rpn_post_nms_top_n_train=2000, rpn_post_nms_top_n_test=1000)
+            min_size=512, max_size=640)
 
     def forward(self, rgb, ir, targets=None):
         if isinstance(rgb, torch.Tensor):
@@ -197,13 +170,12 @@ class FasterRCNN(nn.Module):
             ir_list  = [ir[i]  for i in range(ir.shape[0])]
         else:
             rgb_list, ir_list = list(rgb), list(ir)
-
         rgb_batch = torch.stack(rgb_list)
         ir_batch  = torch.stack(ir_list)
         images_t, targets = self.detector.transform(rgb_list, targets)
         B, _, H, W = images_t.tensors.shape
-        ir_r = F.interpolate(ir_batch, size=(H,W), mode="bilinear", align_corners=False)
-        features   = self.detector.backbone(images_t.tensors, ir_r)
+        ir_r = torch.nn.functional.interpolate(ir_batch, size=(H,W), mode="bilinear", align_corners=False)
+        features = self.detector.backbone(images_t.tensors, ir_r)
         proposals, prop_losses = self.detector.rpn(images_t, features, targets)
         detections, det_losses = self.detector.roi_heads(
             features, proposals, images_t.image_sizes, targets)
@@ -216,55 +188,3 @@ class FasterRCNN(nn.Module):
             losses.update(det_losses)
             return losses
         return detections
-
-
-def load_llvip_checkpoint_for_flir(model, llvip_ckpt_path, device="cuda"):
-    """Load LLVIP V4 weights into V5 model, skipping shape-mismatched layers."""
-    import torch
-    ckpt = torch.load(llvip_ckpt_path, map_location=device)
-    state = ckpt.get("model_state_dict", ckpt)
-
-    # Filter: only load tensors whose shape EXACTLY matches current model
-    model_state = model.state_dict()
-    to_load  = {}
-    skipped  = []
-    for k, v in state.items():
-        if k in model_state:
-            if model_state[k].shape == v.shape:
-                to_load[k] = v
-            else:
-                skipped.append(f"  shape mismatch: {k}  ckpt={tuple(v.shape)} model={tuple(model_state[k].shape)}")
-        else:
-            skipped.append(f"  not in model:   {k}")
-
-    # Load only the compatible weights
-    model_state.update(to_load)
-    model.load_state_dict(model_state, strict=True)
-
-    print(f"[checkpoint] loaded  : {len(to_load)} / {len(state)} tensors from LLVIP checkpoint")
-    print(f"[checkpoint] skipped : {len(skipped)} tensors (re-initialized fresh)")
-    for s in skipped:
-        print(s)
-
-    # Freeze C1-C3 backbone layers (preserve low-level features from LLVIP)
-    freeze_targets = [
-        model.detector.backbone.body.rgb_stem,
-        model.detector.backbone.body.ir_stem,
-        model.detector.backbone.body.rgb_layer1,
-        model.detector.backbone.body.ir_layer1,
-        model.detector.backbone.body.rgb_layer2,
-        model.detector.backbone.body.ir_layer2,
-        model.detector.backbone.body.rgb_layer3,
-        model.detector.backbone.body.ir_layer3,
-    ]
-    frozen = 0
-    for module in freeze_targets:
-        for p in module.parameters():
-            p.requires_grad = False
-            frozen += p.numel()
-    total = sum(p.numel() for p in model.parameters())
-    print(f"[freeze] {frozen:,}/{total:,} params frozen ({100*frozen/total:.1f}%) — C1-C3 locked, C4+ trainable")
-
-    return model.to(device)
-
-
